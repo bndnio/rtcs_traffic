@@ -1926,9 +1926,23 @@ Discarded input sections
  .text          0x00000000        0x0 src\firmware.o
  .data          0x00000000        0x0 src\firmware.o
  .bss           0x00000000        0x0 src\firmware.o
- .debug_line    0x00000000        0x0 src\firmware.o
- .debug_str     0x00000000      0x117 src\firmware.o
+ .text.writeQueue
+                0x00000000       0x14 src\firmware.o
+ .text.writeIntersection
+                0x00000000       0x16 src\firmware.o
+ .text.writeLight
+                0x00000000       0x16 src\firmware.o
+ .text.readFlow
+                0x00000000       0x12 src\firmware.o
+ .debug_info    0x00000000      0x122 src\firmware.o
+ .debug_abbrev  0x00000000       0xb5 src\firmware.o
+ .debug_aranges
+                0x00000000       0x38 src\firmware.o
+ .debug_ranges  0x00000000       0x28 src\firmware.o
+ .debug_line    0x00000000       0x81 src\firmware.o
+ .debug_str     0x00000000      0x1ba src\firmware.o
  .comment       0x00000000       0x7d src\firmware.o
+ .debug_frame   0x00000000       0xa8 src\firmware.o
  .ARM.attributes
                 0x00000000       0x37 src\firmware.o
  .text          0x00000000        0x0 src\helpers.o
@@ -3869,6 +3883,7 @@ pxCurrentTCB                                      FreeRTOS_Source\tasks.o
                                                   FreeRTOS_Source\portable\GCC\ARM_CM4F\port.o
 pxPortInitialiseStack                             FreeRTOS_Source\portable\GCC\ARM_CM4F\port.o
                                                   FreeRTOS_Source\tasks.o
+readFlow                                          src\firmware.o
 sprintf                                           src\tiny_printf.o
 ts_formatlength                                   src\tiny_printf.o
 ts_formatstring                                   src\tiny_printf.o
@@ -3969,6 +3984,9 @@ vTaskSuspendAll                                   FreeRTOS_Source\tasks.o
 vTaskSwitchContext                                FreeRTOS_Source\tasks.o
                                                   FreeRTOS_Source\portable\GCC\ARM_CM4F\port.o
 vTimerSetTimerID                                  FreeRTOS_Source\timers.o
+writeIntersection                                 src\firmware.o
+writeLight                                        src\firmware.o
+writeQueue                                        src\firmware.o
 xEventGroupClearBits                              FreeRTOS_Source\event_groups.o
 xEventGroupCreate                                 FreeRTOS_Source\event_groups.o
 xEventGroupGetBitsFromISR                         FreeRTOS_Source\event_groups.o

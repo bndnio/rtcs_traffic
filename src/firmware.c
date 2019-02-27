@@ -10,9 +10,9 @@
 /* #####- writeQueue -#####
  * Write traffic LEDs
  * ## params:
- * queueState - state of traffic not in or past intersection
+ * vehicleState - state of traffic not in or past intersection
  */
-void writeQueue(QueueState queueState) {
+void writeQueue(VehicleState vehicleState) {
 	return;
 }
 

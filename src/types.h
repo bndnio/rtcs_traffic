@@ -8,14 +8,14 @@
 #ifndef TYPES_H_
 #define TYPES_H_
 
-typedef bool Vehicle;
-typedef Vehicle QueueState[8];
-typedef enum nv {NO, YES, NA} NextVehicle;
-typedef enum ls {STOP, SLOW, GO} LightState;
+typedef enum bool {FALSE, TRUE} Boolean;
+typedef Boolean Vehicle;
+typedef Vehicle VehicleState[19];
+typedef enum nxtveh {NO, YES, NA} NextVehicle;
+typedef enum lts {STOP, SLOW, GO} LightState;
 typedef struct {
-	QueueState queueState;
+	VehicleState vehicleState;
 	LightState lightState;
 } TrafficState;
 
-#endif  TYPES_H_
-
+#endif // TYPES_H_

@@ -1,0 +1,4 @@
+firmware.c:15:6:writeQueue	16	static
+firmware.c:24:6:writeIntersection	16	static
+firmware.c:33:6:writeLight	16	static
+firmware.c:40:5:readFlow	4	static

@@ -13,9 +13,9 @@
  * ## returns:
  * TrafficState - new state of traffic after advancing queue
  */
-TrafficState advQueue(Vehicle incomingVehicle, QueueState queueState) {
-
-}
+//TrafficState advQueue(Vehicle incomingVehicle, QueueState queueState) {
+//
+//}
 
 /* #####- stickyAdvQueue -#####
  * Advance traffic queue without pushing traffic into intersection and add incoming vehicle
@@ -26,6 +26,6 @@ TrafficState advQueue(Vehicle incomingVehicle, QueueState queueState) {
  * ## returns:
  * TrafficState - new state of traffic after advancing queue
  */
-QueueState stickyAdvQueue(Vehicle incomingVehicle, QueueState, queueState, LightState, lightState) {
-
-}
+//QueueState stickyAdvQueue(Vehicle incomingVehicle, QueueState, queueState, LightState, lightState) {
+//
+//}

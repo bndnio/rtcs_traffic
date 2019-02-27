@@ -13,7 +13,7 @@
  * queueState - state of traffic not in or past intersection
  */
 void writeQueue(QueueState queueState) {
-
+	return;
 }
 
 /* #####- writeIntersection -#####
@@ -22,7 +22,7 @@ void writeQueue(QueueState queueState) {
  * vehicleIncoming - next vehicle to enter intersection
  */
 void writeIntersection(Vehicle vehicleIncoming) {
-
+	return;
 }
 
 /* #####- writeLight -#####
@@ -31,7 +31,7 @@ void writeIntersection(Vehicle vehicleIncoming) {
  * lightState - the next state for the traffic light
  */
 void writeLight(LightState lightState) {
-
+	return;
 }
 
 /* #####- readFlow -#####
@@ -39,4 +39,5 @@ void writeLight(LightState lightState) {
  */
 int readFlow() {
 //	Read value from FLOW_PIN
+	return -1;
 }

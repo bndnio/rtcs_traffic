@@ -136,6 +136,7 @@ functionality.
 
 /* Standard includes. */
 #include <stdint.h>
+#include <unistd.h>
 
 /* Kernel includes. */
 #include "stm32f4xx.h"
@@ -452,6 +453,35 @@ static void prvSetupHardware( void )
 	/* Ensure all priority bits are assigned as preemption priority bits.
 	http://www.freertos.org/RTOS-Cortex-M3-M4.html */
 	NVIC_SetPriorityGrouping( 0 );
+	GPIO_InitTypeDef GPIO_InitStructure;
+	GPIO_InitStructure.GPIO_Pin = 	GPIO_Pin_1;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+	GPIO_Init(GPIOB,&GPIO_InitStructure);
+
+
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+	GPIO_Init(GPIOA,&GPIO_InitStructure);
+
+	for(int i = 0; i<100;i++){
+		if (i % 2 == 0){
+			GPIO_Write(GPIOA, 0x0);
+		}else{
+			GPIO_Write(GPIOA, 0x0);
+		}
+
+		GPIO_Write(GPIOB, 0x1);
+		GPIO_Write(GPIOB, 0x0);
+		for(int j=0; j< 1000000;j++){
+
+		}
+	}
 
 	/* TODO: Setup the clocks, etc. here, if they were not configured before
 	main() was called. */

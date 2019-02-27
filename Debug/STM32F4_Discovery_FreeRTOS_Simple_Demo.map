@@ -1940,7 +1940,7 @@ Discarded input sections
                 0x00000000       0x38 src\firmware.o
  .debug_ranges  0x00000000       0x28 src\firmware.o
  .debug_line    0x00000000       0x81 src\firmware.o
- .debug_str     0x00000000      0x1ba src\firmware.o
+ .debug_str     0x00000000      0x1bc src\firmware.o
  .comment       0x00000000       0x7d src\firmware.o
  .debug_frame   0x00000000       0xa8 src\firmware.o
  .ARM.attributes

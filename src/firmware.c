@@ -7,30 +7,12 @@
 // include custom types
 #include "types.h"
 
-/* #####- writeQueue -#####
- * Write traffic LEDs
+/* #####- writeVehicles -#####
+ * Write vehicles and traffic light LEDs based on state
  * ## params:
- * vehicleState - state of traffic not in or past intersection
+ * boardState - state of LEDs on board
  */
-void writeQueue(VehicleState vehicleState) {
-	return;
-}
-
-/* #####- writeIntersection -#####
- * Write next vehicle to intersection
- * ## params:
- * vehicleIncoming - next vehicle to enter intersection
- */
-void writeIntersection(Vehicle vehicleIncoming) {
-	return;
-}
-
-/* #####- writeLight -#####
- * Write a new value to the traffic light
- * ## params:
- * lightState - the next state for the traffic light
- */
-void writeLight(LightState lightState) {
+void writeTraffic(BoardState boardState) {
 	return;
 }
 

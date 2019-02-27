@@ -9,13 +9,12 @@
 #define TYPES_H_
 
 typedef enum bool {FALSE, TRUE} Boolean;
-typedef Boolean Vehicle;
-typedef Vehicle VehicleState[19];
-typedef enum nxtveh {NO, YES, NA} NextVehicle;
-typedef enum lts {STOP, SLOW, GO} LightState;
+typedef uint32_t BoardState;
+typedef enum nxtveh {YES, NO, UNDEFINED} NextVehicle;
+typedef enum tfclt {RED, YELLOW, GREEN} LightColor;
 typedef struct {
-	VehicleState vehicleState;
-	LightState lightState;
+	BoardState boardState;
+	NextVehicle nextVehicle;
 } TrafficState;
 
 #endif // TYPES_H_

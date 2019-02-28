@@ -7,12 +7,12 @@
 // include custom types
 #include "types.h"
 
-/* #####- writeVehicles -#####
+/* #####- writeBoard -#####
  * Write vehicles and traffic light LEDs based on state
  * ## params:
  * boardState - state of LEDs on board
  */
-void writeTraffic(BoardState boardState) {
+void writeBoard(BoardState boardState) {
 	return;
 }
 

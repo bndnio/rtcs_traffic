@@ -137,6 +137,8 @@ functionality.
 /* Standard includes. */
 #include <stdint.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
 
 /* Kernel includes. */
 #include "stm32f4xx.h"
@@ -145,6 +147,11 @@ functionality.
 #include "../FreeRTOS_Source/include/semphr.h"
 #include "../FreeRTOS_Source/include/task.h"
 #include "../FreeRTOS_Source/include/timers.h"
+
+#include "types.h"
+#include "masks.h"
+#include "firmware.c"
+#include "helpers.c"
 
 /* Priorities at which the tasks are created.  The event semaphore task is
 given the maximum priority of ( configMAX_PRIORITIES - 1 ) to ensure it runs as
@@ -165,6 +172,16 @@ converted to ticks using the portTICK_RATE_MS constant. */
 will remove items as they are added, meaning the send task should always find
 the queue empty. */
 #define mainQUEUE_LENGTH					( 1 )
+
+/*-----------------------------------------------------------*/
+// Global Variables
+BoardState gBoardState = (0x00000000 | LIGHT_GREEN);
+// TODO: Figure out mutex
+Mutex gBoardStateMutex;
+LightColor gLightColor = RED;
+int gFlow = 0;
+// TODO: Lookup max value of potentiometer ADC
+int MAX_OF_POT = 100;
 
 /*-----------------------------------------------------------*/
 
@@ -213,7 +230,7 @@ static volatile uint32_t ulCountOfReceivedSemaphores = 0;
 
 int main(void)
 {
-xTimerHandle xExampleSoftwareTimer = NULL;
+	xTimerHandle xExampleSoftwareTimer = NULL;
 
 	/* Configure the system ready to run the demo.  The clock configuration
 	can be done here if it was not done before main() was called. */
@@ -291,6 +308,76 @@ xTimerHandle xExampleSoftwareTimer = NULL;
 	for( ;; );
 }
 /*-----------------------------------------------------------*/
+
+static void vTrafficFlowAdjustment(void *pvParameters) {
+	while (1) {
+		// Run every 250ms
+		vTaskDelay(250);
+
+		// Put flow into global
+		gFlow = readFlow();
+	}
+}
+
+static void vTrafficCreator(void *pvParameters) {
+	// Initialize timer
+	time_t t;
+	srand((unsigned) time(&t));
+
+	while (1) {
+		// Run every 250ms
+		vTaskDelay(250);
+
+		// Get random probability
+		int prob = rand() % MAX_OF_POT;
+
+		// Determine if a vehicle arrives
+		Vehicle nextVehicle;
+		if (prob >= gFlow) {
+			nextVehicle = TRUE;
+		} else {
+			nextVehicle = FALSE;
+		}
+
+		// TODO: Where does logic go for adv vs. stickyAdv
+		// TODO: get Mutex
+		if (gLightColor == GREEN) {
+			gBoardState = advVehicles(nextVehicle, gBoardState);
+		} else {
+			gBoardState = stickyAdvVehicles(nextVehicle, gBoardState);
+		}
+	}
+}
+
+static void vTrafficLight(void *pvParameters) {
+	while(1) {
+		// Run every 250ms
+		vTaskDelay(250);
+
+		// TODO: figure out timing
+		// TODO: get mutex
+		if (gLightColor == GREEN) {
+			gBoardState = changeLightColor(YELLOW, gBoardState);
+			gLightColor = YELLOW;
+		} else if (gLightColor == YELLOW) {
+			gBoardState = changeLightColor(RED, gBoardState);
+			gLightColor = RED;
+		} else if (gLightColor == RED) {
+			gBoardState = changeLightColor(GREEN, gBoardState);
+			gLightColor = RED;
+		}
+	}
+}
+
+static void vDisplayBoard(void *pvParameters) {
+	while(1) {
+		// Run every 10mx
+		vTaskDelay(10);
+
+		// Write to board
+		writeBoard(gBoardState);
+	}
+}
 
 static void vExampleTimerCallback( xTimerHandle xTimer )
 {
@@ -453,21 +540,26 @@ static void prvSetupHardware( void )
 	/* Ensure all priority bits are assigned as preemption priority bits.
 	http://www.freertos.org/RTOS-Cortex-M3-M4.html */
 	NVIC_SetPriorityGrouping( 0 );
-	GPIO_InitTypeDef GPIO_InitStructure;
-	GPIO_InitStructure.GPIO_Pin = 	GPIO_Pin_1;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-	GPIO_Init(GPIOB,&GPIO_InitStructure);
 
+	/* Setup Port -X-
+	 * Output
+	 * Used to push values to shift register
+	 */
+	GPIO_InitTypeDef GPIO_PortA_InitStructure;
+	GPIO_PortA_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_PortA_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
+	GPIO_PortA_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_Init(GPIOA,&GPIO_PortA_InitStructure);
 
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_1;
-	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-	GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-	GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
-	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-	GPIO_Init(GPIOA,&GPIO_InitStructure);
+	/* Setup Port -X-
+	 * Input
+	 * Used to read values from potentiometer
+	 */
+	GPIO_InitTypeDef GPIO_PortB_InitStructure;
+	GPIO_PortB_InitStructure.GPIO_Pin = 	GPIO_Pin_1;
+	GPIO_PortB_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+	GPIO_PortB_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_Init(GPIOB,&GPIO_PortB_InitStructure);
 
 	for(int i = 0; i<100;i++){
 		if (i % 2 == 0){

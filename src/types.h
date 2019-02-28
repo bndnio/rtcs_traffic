@@ -5,16 +5,14 @@
  *      Author: bearl
 */
 
+#include <stdint.h>
+
 #ifndef TYPES_H_
 #define TYPES_H_
 
 typedef enum bool {FALSE, TRUE} Boolean;
 typedef uint32_t BoardState;
-typedef enum nxtveh {YES, NO, UNDEFINED} NextVehicle;
+typedef Boolean Vehicle;
 typedef enum tfclt {RED, YELLOW, GREEN} LightColor;
-typedef struct {
-	BoardState boardState;
-	NextVehicle nextVehicle;
-} TrafficState;
 
 #endif // TYPES_H_

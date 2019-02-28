@@ -5,6 +5,11 @@
  *      Author: bearl
  */
 
+#include <stdint.h>
+
+#include "masks.h"
+#include "types.h"
+
 /* #####- advVehicles -#####
  * Advance traffic queue and add incoming vehicle
  * ## params:
@@ -14,20 +19,17 @@
  * BoardState - new state of board after advancing vehicles
  */
 BoardState advVehicles(Vehicle incomingVehicle, BoardState boardState) {
-
+	// Build bit for incoming vehicle
 	uint32_t topVeh;
-	if (incomingVehicle == YES) {
+	if (incomingVehicle == TRUE) {
 		topVeh = 0x80000000;
-	} else if (incomingVehicle == No) {
+	} else if (incomingVehicle == FALSE) {
 		topVeh = 0x00000000;
-	} else {
-		topVeh = 0x00000000;
-		// TODO: log error
 	}
 
+	// Build new boardState
 	return 0x00000000
 			| (VEHICLE_MASK & (boardState >> 1))
-			| incomingVehicle
 			| (LIGHT_MASK & boardState)
 			| topVeh;
 }
@@ -42,8 +44,32 @@ BoardState advVehicles(Vehicle incomingVehicle, BoardState boardState) {
  * BoardState - new state of board after advancing vehicles
  */
 BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
-	// TODO: make this a sticky advance
-	return advVehicles(incomingVehicle, boardState);
+	// Build bit for incoming vehicle
+	uint32_t topVeh;
+	if (incomingVehicle == TRUE) {
+		topVeh = 0x80000000;
+	} else if (incomingVehicle == FALSE) {
+		topVeh = 0x00000000;
+	}
+
+	// Find rightmost 0 in vehicles before light
+	uint32_t stopLoc = (boardState | ~QUEUE_MASK);
+	stopLoc = ~stopLoc & (stopLoc+1);
+
+	// Create mask for just those vehicles before the light with room to move ahead
+	uint32_t dynMask = 0x00000000;
+	for (int i =0; i <= 32-stopLoc; i++) {
+		dynMask = ((dynMask >> 1) | 0x80000000);
+	}
+
+	// Build new boardState
+	return 0x00000000
+			| ((dynMask & boardState) >> 1)
+			| (~dynMask & QUEUE_MASK & boardState)
+			| (PAST_MASK & ((PAST_MASK & boardState) >> 1))
+			| (LIGHT_MASK & boardState)
+			| topVeh;
+
 }
 
 
@@ -55,8 +81,7 @@ BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
  * ## returns:
  * BoardState - new state of board after changing color of light
  */
-BoardState stickyAdvVehicles(LightColor lightColor, BoardState boardState) {
-
+BoardState changeLightColor(LightColor lightColor, BoardState boardState) {
 	uint32_t nxtLight;
 	if (lightColor == GREEN) {
 		nxtLight = LIGHT_GREEN;
@@ -67,6 +92,6 @@ BoardState stickyAdvVehicles(LightColor lightColor, BoardState boardState) {
 	}
 
 	return 0x00000000
-			| (!LIGHT_MASK & boardState)
+			| (~LIGHT_MASK & boardState)
 			| nxtLight;
 }

@@ -150,8 +150,8 @@ functionality.
 
 #include "types.h"
 #include "masks.h"
-#include "firmware.c"
-#include "helpers.c"
+#include "firmware.h"
+#include "helpers.h"
 
 /* Priorities at which the tasks are created.  The event semaphore task is
 given the maximum priority of ( configMAX_PRIORITIES - 1 ) to ensure it runs as
@@ -177,11 +177,11 @@ the queue empty. */
 // Global Variables
 BoardState gBoardState = (0x00000000 | LIGHT_GREEN);
 // TODO: Figure out mutex
-Mutex gBoardStateMutex;
+//Mutex gBoardStateMutex;
 LightColor gLightColor = RED;
-int gFlow = 0;
+
 // TODO: Lookup max value of potentiometer ADC
-int MAX_OF_POT = 100;
+const int MAX_OF_POT = 4095;
 
 /*-----------------------------------------------------------*/
 
@@ -226,6 +226,9 @@ static volatile uint32_t ulCountOfTimerCallbackExecutions = 0;
 static volatile uint32_t ulCountOfItemsReceivedOnQueue = 0;
 static volatile uint32_t ulCountOfReceivedSemaphores = 0;
 
+// Our tasks
+static void vDisplayBoard(void *pvParameters);
+static void vTrafficFlowAdjustment(void *pvParameters);
 /*-----------------------------------------------------------*/
 
 int main(void)
@@ -241,9 +244,12 @@ int main(void)
 	http://www.freertos.org/a00116.html */
 	xQueue = xQueueCreate( 	mainQUEUE_LENGTH,		/* The number of items the queue can hold. */
 							sizeof( uint32_t ) );	/* The size of each item the queue holds. */
+	xFlowQueue = xQueueCreate( 	mainQUEUE_LENGTH,		/* The number of items the queue can hold. */
+							sizeof( uint32_t ) );	/* The size of each item the queue holds. */
+
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xQueue, "MainQueue" );
-
+	vQueueAddToRegistry( xFlowQueue, "FlowQueue" );
 
 	/* Create the semaphore used by the FreeRTOS tick hook function and the
 	event semaphore task. */
@@ -291,6 +297,22 @@ int main(void)
 								vExampleTimerCallback				/* The callback function that switches the LED off. */
 							);
 
+	/* Create the queue receive task as described in the comments at the top
+	of this	file.  http://www.freertos.org/a00125.html */
+	xTaskCreate( 	vDisplayBoard,			/* The function that implements the task. */
+					"DisplayBoard", 		/* Text name for the task, just to help debugging. */
+					configMINIMAL_STACK_SIZE, 		/* The size (in words) of the stack that should be created for the task. */
+					NULL, 							/* A parameter that can be passed into the task.  Not used in this simple demo. */
+					mainQUEUE_RECEIVE_TASK_PRIORITY,/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+					NULL );							/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+	xTaskCreate( 	vTrafficFlowAdjustment,			/* The function that implements the task. */
+					"FlowAdjustment", 		/* Text name for the task, just to help debugging. */
+					configMINIMAL_STACK_SIZE, 		/* The size (in words) of the stack that should be created for the task. */
+					NULL, 							/* A parameter that can be passed into the task.  Not used in this simple demo. */
+					mainQUEUE_RECEIVE_TASK_PRIORITY,/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+					NULL );							/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+
+
 	/* Start the created timer.  A block time of zero is used as the timer
 	command queue cannot possibly be full here (this is the first timer to
 	be created, and it is not yet running).
@@ -310,23 +332,34 @@ int main(void)
 /*-----------------------------------------------------------*/
 
 static void vTrafficFlowAdjustment(void *pvParameters) {
+	u_int16_t ulReceivedValue;
 	while (1) {
 		// Run every 250ms
 		vTaskDelay(250);
 
+		// Get value from flowQueue
+		xQueueReceive( xFlowQueue, &ulReceivedValue, portMAX_DELAY );
 		// Put flow into global
-		gFlow = readFlow();
+		uint16_t gFlow = readFlow();
+		printf(gFlow);
+
+		// Push value back to queue
+		xQueueSend( xFlowQueue, &gFlow, 0);
 	}
 }
 
 static void vTrafficCreator(void *pvParameters) {
 	// Initialize timer
 	time_t t;
+	u_int16_t  gFlow;
 	srand((unsigned) time(&t));
 
 	while (1) {
 		// Run every 250ms
 		vTaskDelay(250);
+
+		// Get value from flowQueue
+		xQueueReceive( xFlowQueue, &gFlow, portMAX_DELAY );
 
 		// Get random probability
 		int prob = rand() % MAX_OF_POT;
@@ -340,12 +373,15 @@ static void vTrafficCreator(void *pvParameters) {
 		}
 
 		// TODO: Where does logic go for adv vs. stickyAdv
-		// TODO: get Mutex
+
 		if (gLightColor == GREEN) {
 			gBoardState = advVehicles(nextVehicle, gBoardState);
 		} else {
 			gBoardState = stickyAdvVehicles(nextVehicle, gBoardState);
 		}
+
+		// Push value back to queue
+		xQueueSend( xFlowQueue, &gFlow, 0);
 	}
 }
 
@@ -355,7 +391,7 @@ static void vTrafficLight(void *pvParameters) {
 		vTaskDelay(250);
 
 		// TODO: figure out timing
-		// TODO: get mutex
+		// TODO: get mutex rip
 		if (gLightColor == GREEN) {
 			gBoardState = changeLightColor(YELLOW, gBoardState);
 			gLightColor = YELLOW;
@@ -370,12 +406,18 @@ static void vTrafficLight(void *pvParameters) {
 }
 
 static void vDisplayBoard(void *pvParameters) {
+	uint32_t ulReceivedValue;
+
 	while(1) {
 		// Run every 10mx
 		vTaskDelay(10);
 
+		xQueueReceive( xQueue, &ulReceivedValue, portMAX_DELAY );
+
 		// Write to board
-		writeBoard(gBoardState);
+		writeBoard(ulReceivedValue);
+
+		xQueueSend( xQueue, &ulReceivedValue, 0);
 	}
 }
 
@@ -540,15 +582,16 @@ static void prvSetupHardware( void )
 	/* Ensure all priority bits are assigned as preemption priority bits.
 	http://www.freertos.org/RTOS-Cortex-M3-M4.html */
 	NVIC_SetPriorityGrouping( 0 );
-
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOB, ENABLE);
 	/* Setup Port -X-
 	 * Output
 	 * Used to push values to shift register
 	 */
 	GPIO_InitTypeDef GPIO_PortA_InitStructure;
-	GPIO_PortA_InitStructure.GPIO_Pin = GPIO_Pin_1;
+	GPIO_PortA_InitStructure.GPIO_Pin =  GPIO_Pin_1 | GPIO_Pin_2;
 	GPIO_PortA_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
-	GPIO_PortA_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+	GPIO_PortA_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
 	GPIO_Init(GPIOA,&GPIO_PortA_InitStructure);
 
 	/* Setup Port -X-
@@ -556,26 +599,33 @@ static void prvSetupHardware( void )
 	 * Used to read values from potentiometer
 	 */
 	GPIO_InitTypeDef GPIO_PortB_InitStructure;
-	GPIO_PortB_InitStructure.GPIO_Pin = 	GPIO_Pin_1;
-	GPIO_PortB_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+	GPIO_PortB_InitStructure.GPIO_Pin =  GPIO_Pin_0 | GPIO_Pin_1;
+	GPIO_PortB_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
 	GPIO_PortB_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
 	GPIO_Init(GPIOB,&GPIO_PortB_InitStructure);
 
-	for(int i = 0; i<100;i++){
-		if (i % 2 == 0){
-			GPIO_Write(GPIOA, 0x0);
-		}else{
-			GPIO_Write(GPIOA, 0x0);
-		}
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_ADC1,ENABLE);//Enable clock for ADC Ports
+	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOC,ENABLE);//Enable GPIO pin to read analog input
 
-		GPIO_Write(GPIOB, 0x1);
-		GPIO_Write(GPIOB, 0x0);
-		for(int j=0; j< 1000000;j++){
+	GPIO_InitTypeDef GPIO_initStructre;
+	GPIO_initStructre.GPIO_Pin = GPIO_Pin_1; // Provide input to channel 10 of ADC i.e GPIO Pin 0 of Port C
+	GPIO_initStructre.GPIO_Mode = GPIO_Mode_AN; //GPIO Pin as analog Mode
+	GPIO_initStructre.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	GPIO_Init(GPIOC,&GPIO_initStructre);// GPIO Initialization
 
-		}
-	}
-
+	// Analog Mode Deinitialization, Configuration and Initialization
+	ADC_DeInit();
+	ADC_InitTypeDef ADC_InitStruct;
+	ADC_InitStruct.ADC_ScanConvMode=DISABLE;
+	ADC_InitStruct.ADC_Resolution=ADC_Resolution_12b;
+	ADC_InitStruct.ADC_ContinuousConvMode=ENABLE;
+	ADC_InitStruct.ADC_ExternalTrigConv=ADC_ExternalTrigConv_T1_CC1;
+	ADC_InitStruct.ADC_ExternalTrigConvEdge=ADC_ExternalTrigConvEdge_None;
+	ADC_InitStruct.ADC_DataAlign=ADC_DataAlign_Right;
+	ADC_InitStruct.ADC_NbrOfConversion=1;
+	ADC_Init(ADC1, &ADC_InitStruct);
+	ADC_Cmd(ADC1, ENABLE);
+	ADC_RegularChannelConfig(ADC1, ADC_Channel_11, 1, ADC_SampleTime_144Cycles);
 	/* TODO: Setup the clocks, etc. here, if they were not configured before
 	main() was called. */
 }
-

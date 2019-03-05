@@ -28,10 +28,11 @@ BoardState advVehicles(Vehicle incomingVehicle, BoardState boardState) {
 	}
 
 	// Build new boardState
-	return 0x00000000
-			| (VEHICLE_MASK & (boardState >> 1))
-			| (LIGHT_MASK & boardState)
-			| topVeh;
+
+	uint32_t silly = (VEHICLE_MASK & (boardState >> 1));
+	uint32_t silly2 = (LIGHT_MASK & boardState);
+	uint32_t silly3 = topVeh;
+	return 0x0 | silly | silly2 | silly3;
 }
 
 

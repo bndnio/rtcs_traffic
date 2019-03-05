@@ -175,13 +175,15 @@ the queue empty. */
 
 /*-----------------------------------------------------------*/
 // Global Variables
-BoardState gBoardState = (0x00000000 | LIGHT_GREEN);
-// TODO: Figure out mutex
-//Mutex gBoardStateMutex;
-LightColor gLightColor = RED;
-
-// TODO: Lookup max value of potentiometer ADC
 const int MAX_OF_POT = 4095;
+
+/*-----------------------------------------------------------*/
+
+// Our tasks
+static void prvTrafficFlowAdjustment(void *pvParameters);
+static void prvTrafficCreator(void *pvParameters);
+static void prvTrafficLight(void *pvParameters);
+static void prvDisplayBoard(void *pvParameters);
 
 /*-----------------------------------------------------------*/
 
@@ -213,6 +215,7 @@ static void prvEventSemaphoreTask( void *pvParameters );
 
 /* The queue used by the queue send and queue receive tasks. */
 static xQueueHandle xQueue = NULL;
+static xQueueHandle xFlowQueue = NULL;
 
 /* The semaphore (in this case binary) that is used by the FreeRTOS tick hook
  * function and the event semaphore task.
@@ -226,9 +229,6 @@ static volatile uint32_t ulCountOfTimerCallbackExecutions = 0;
 static volatile uint32_t ulCountOfItemsReceivedOnQueue = 0;
 static volatile uint32_t ulCountOfReceivedSemaphores = 0;
 
-// Our tasks
-static void vDisplayBoard(void *pvParameters);
-static void vTrafficFlowAdjustment(void *pvParameters);
 /*-----------------------------------------------------------*/
 
 int main(void)
@@ -242,50 +242,26 @@ int main(void)
 
 	/* Create the queue used by the queue send and queue receive tasks.
 	http://www.freertos.org/a00116.html */
-	xQueue = xQueueCreate( 	mainQUEUE_LENGTH,		/* The number of items the queue can hold. */
-							sizeof( uint32_t ) );	/* The size of each item the queue holds. */
+	xQueue = xQueueCreate( 	mainQUEUE_LENGTH,			/* The number of items the queue can hold. */
+							sizeof( uint32_t ) );		/* The size of each item the queue holds. */
+
 	xFlowQueue = xQueueCreate( 	mainQUEUE_LENGTH,		/* The number of items the queue can hold. */
-							sizeof( uint32_t ) );	/* The size of each item the queue holds. */
+								sizeof( uint16_t ) );	/* The size of each item the queue holds. */
 
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xQueue, "MainQueue" );
 	vQueueAddToRegistry( xFlowQueue, "FlowQueue" );
+
+	u_int16_t defaultFlow = 0;
+	u_int32_t defaultBoardState = (0x00000000 | LIGHT_GREEN);
+	xQueueSend( xFlowQueue, &defaultFlow, 0);
+	xQueueSend( xQueue, &defaultBoardState, 0);
 
 	/* Create the semaphore used by the FreeRTOS tick hook function and the
 	event semaphore task. */
 	vSemaphoreCreateBinary( xEventSemaphore );
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xEventSemaphore, "xEventSemaphore" );
-
-
-	/* Create the queue receive task as described in the comments at the top
-	of this	file.  http://www.freertos.org/a00125.html */
-	xTaskCreate( 	prvQueueReceiveTask,			/* The function that implements the task. */
-					"Rx", 		/* Text name for the task, just to help debugging. */
-					configMINIMAL_STACK_SIZE, 		/* The size (in words) of the stack that should be created for the task. */
-					NULL, 							/* A parameter that can be passed into the task.  Not used in this simple demo. */
-					mainQUEUE_RECEIVE_TASK_PRIORITY,/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
-					NULL );							/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
-
-
-	/* Create the queue send task in exactly the same way.  Again, this is
-	described in the comments at the top of the file. */
-	xTaskCreate( 	prvQueueSendTask,
-					"TX",
-					configMINIMAL_STACK_SIZE,
-					NULL,
-					mainQUEUE_SEND_TASK_PRIORITY,
-					NULL );
-
-
-	/* Create the task that is synchronised with an interrupt using the
-	xEventSemaphore semaphore. */
-	xTaskCreate( 	prvEventSemaphoreTask,
-					"Sem",
-					configMINIMAL_STACK_SIZE,
-					NULL,
-					mainEVENT_SEMAPHORE_TASK_PRIORITY,
-					NULL );
 
 
 	/* Create the software timer as described in the comments at the top of
@@ -299,19 +275,34 @@ int main(void)
 
 	/* Create the queue receive task as described in the comments at the top
 	of this	file.  http://www.freertos.org/a00125.html */
-	xTaskCreate( 	vDisplayBoard,			/* The function that implements the task. */
-					"DisplayBoard", 		/* Text name for the task, just to help debugging. */
-					configMINIMAL_STACK_SIZE, 		/* The size (in words) of the stack that should be created for the task. */
-					NULL, 							/* A parameter that can be passed into the task.  Not used in this simple demo. */
-					mainQUEUE_RECEIVE_TASK_PRIORITY,/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
-					NULL );							/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
-	xTaskCreate( 	vTrafficFlowAdjustment,			/* The function that implements the task. */
-					"FlowAdjustment", 		/* Text name for the task, just to help debugging. */
-					configMINIMAL_STACK_SIZE, 		/* The size (in words) of the stack that should be created for the task. */
-					NULL, 							/* A parameter that can be passed into the task.  Not used in this simple demo. */
-					mainQUEUE_RECEIVE_TASK_PRIORITY,/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
-					NULL );							/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
 
+	xTaskCreate(prvTrafficFlowAdjustment,			/* The function that implements the task. */
+				"FlowAdjustment", 					/* Text name for the task, just to help debugging. */
+				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
+				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
+				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+
+	xTaskCreate(prvTrafficCreator,					/* The function that implements the task. */
+				"TrafficCreator", 					/* Text name for the task, just to help debugging. */
+				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
+				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
+				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+
+//	xTaskCreate(prvTrafficLight,					/* The function that implements the task. */
+//				"TrafficLight", 					/* Text name for the task, just to help debugging. */
+//				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
+//				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
+//				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+//				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+
+	xTaskCreate(prvDisplayBoard,					/* The function that implements the task. */
+				"DisplayBoard", 					/* Text name for the task, just to help debugging. */
+				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
+				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
+				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
 
 	/* Start the created timer.  A block time of zero is used as the timer
 	command queue cannot possibly be full here (this is the first timer to
@@ -331,7 +322,7 @@ int main(void)
 }
 /*-----------------------------------------------------------*/
 
-static void vTrafficFlowAdjustment(void *pvParameters) {
+static void prvTrafficFlowAdjustment(void *pvParameters) {
 	u_int16_t ulReceivedValue;
 	while (1) {
 		// Run every 250ms
@@ -348,10 +339,11 @@ static void vTrafficFlowAdjustment(void *pvParameters) {
 	}
 }
 
-static void vTrafficCreator(void *pvParameters) {
+static void prvTrafficCreator(void *pvParameters) {
 	// Initialize timer
 	time_t t;
-	u_int16_t  gFlow;
+	u_int16_t  flow;
+	u_int32_t boardState;
 	srand((unsigned) time(&t));
 
 	while (1) {
@@ -359,53 +351,61 @@ static void vTrafficCreator(void *pvParameters) {
 		vTaskDelay(250);
 
 		// Get value from flowQueue
-		xQueueReceive( xFlowQueue, &gFlow, portMAX_DELAY );
+		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
+		xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
 
 		// Get random probability
 		int prob = rand() % MAX_OF_POT;
 
 		// Determine if a vehicle arrives
 		Vehicle nextVehicle;
-		if (prob >= gFlow) {
+		if (prob >= flow) {
 			nextVehicle = TRUE;
 		} else {
 			nextVehicle = FALSE;
 		}
 
 		// TODO: Where does logic go for adv vs. stickyAdv
-
-		if (gLightColor == GREEN) {
-			gBoardState = advVehicles(nextVehicle, gBoardState);
-		} else {
-			gBoardState = stickyAdvVehicles(nextVehicle, gBoardState);
+		u_int32_t temp = boardState & LIGHT_MASK;
+		u_int32_t temp2 = 0b00000000000000000001000000000000;
+		if ((boardState & LIGHT_MASK) == LIGHT_GREEN) {
+			boardState = advVehicles(nextVehicle, boardState);
 		}
+//		else {
+//			boardState = stickyAdvVehicles(nextVehicle, boardState);
+//		}
 
 		// Push value back to queue
-		xQueueSend( xFlowQueue, &gFlow, 0);
+		xQueueSend( xFlowQueue, &flow, 0);
+		xQueueSend( xQueue, &boardState, 0);
 	}
 }
 
-static void vTrafficLight(void *pvParameters) {
+static void prvTrafficLight(void *pvParameters) {
+	u_int32_t boardState;
+
 	while(1) {
 		// Run every 250ms
 		vTaskDelay(250);
 
+		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
+		u_int32_t lightColor = boardState & LIGHT_MASK;
+
 		// TODO: figure out timing
 		// TODO: get mutex rip
-		if (gLightColor == GREEN) {
-			gBoardState = changeLightColor(YELLOW, gBoardState);
-			gLightColor = YELLOW;
-		} else if (gLightColor == YELLOW) {
-			gBoardState = changeLightColor(RED, gBoardState);
-			gLightColor = RED;
-		} else if (gLightColor == RED) {
-			gBoardState = changeLightColor(GREEN, gBoardState);
-			gLightColor = RED;
+		if (lightColor == LIGHT_GREEN) {
+			boardState = changeLightColor(YELLOW, boardState);
+		} else if (lightColor == LIGHT_YELLOW) {
+			boardState = changeLightColor(RED, boardState);
+		} else if (lightColor == LIGHT_RED) {
+			boardState = changeLightColor(GREEN, boardState);
 		}
+		xQueueSend( xQueue, &boardState, 0);
+
 	}
 }
 
-static void vDisplayBoard(void *pvParameters) {
+static void prvDisplayBoard(void *pvParameters) {
 	uint32_t ulReceivedValue;
 
 	while(1) {

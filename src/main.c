@@ -290,12 +290,12 @@ int main(void)
 				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
 				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
 
-//	xTaskCreate(prvTrafficLight,					/* The function that implements the task. */
-//				"TrafficLight", 					/* Text name for the task, just to help debugging. */
-//				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
-//				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
-//				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
-//				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
+	xTaskCreate(prvTrafficLight,					/* The function that implements the task. */
+				"TrafficLight", 					/* Text name for the task, just to help debugging. */
+				configMINIMAL_STACK_SIZE, 			/* The size (in words) of the stack that should be created for the task. */
+				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
+				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
+				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
 
 	xTaskCreate(prvDisplayBoard,					/* The function that implements the task. */
 				"DisplayBoard", 					/* Text name for the task, just to help debugging. */
@@ -384,7 +384,7 @@ static void prvTrafficLight(void *pvParameters) {
 
 	while(1) {
 		// Run every 250ms
-		vTaskDelay(250);
+		vTaskDelay(5000);
 
 		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
 		u_int32_t lightColor = boardState & LIGHT_MASK;

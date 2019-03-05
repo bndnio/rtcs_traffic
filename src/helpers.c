@@ -29,11 +29,10 @@ BoardState advVehicles(Vehicle incomingVehicle, BoardState boardState) {
 	}
 
 	// Build new boardState
-
-	uint32_t silly = (VEHICLE_MASK & (boardState >> 1));
-	uint32_t silly2 = (LIGHT_MASK & boardState);
-	uint32_t silly3 = topVeh;
-	return 0x0 | silly | silly2 | silly3;
+	return 0x00000000
+			| (VEHICLE_MASK & (boardState >> 1))
+			| (LIGHT_MASK & boardState)
+			| topVeh;
 }
 
 
@@ -60,10 +59,13 @@ BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
 	// Finds lest significant zero
 	stopLoc = ~stopLoc & (stopLoc+1);
 	// Get value of position
-	stopLoc = (int)log2(stopLoc);
+	stopLoc = (int)log2(stopLoc) & 0xFF;
+	if (stopLoc == 0) {
+		stopLoc = 32;
+	}
 	// Create mask for just those vehicles before the light with room to move ahead
 	uint32_t dynMask = 0x00000000;
-	for (int i=0; i <= 31-stopLoc; i++) {
+	for (int i=0; i < 32-stopLoc; i++) {
 		dynMask = ((dynMask >> 1) | 0x80000000);
 	}
 

@@ -34,7 +34,9 @@ uint16_t Get_ADC_Converted_Value()
   {
     return ADC_GetConversionValue(ADC1);
   }
+  return 0;
 }
+
 uint16_t readFlow() {
 //	Read value from FLOW_PIN
 	uint16_t ConvertedValue = Get_ADC_Converted_Value();

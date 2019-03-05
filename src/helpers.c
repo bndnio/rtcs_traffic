@@ -30,9 +30,9 @@ BoardState advVehicles(Vehicle incomingVehicle, BoardState boardState) {
 
 	// Build new boardState
 	return 0x00000000
-			| (VEHICLE_MASK & (boardState >> 1))
-			| (LIGHT_MASK & boardState)
-			| topVeh;
+			| (VEHICLE_MASK & (boardState >> 1)) // Shifts all vehicles
+			| (LIGHT_MASK & boardState)			 // Places lights
+			| topVeh;							 // Places new vehicle
 }
 
 
@@ -56,8 +56,10 @@ BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
 	// Find rightmost 0 in vehicles before light
 	// Set all leftwards bits to 1s
 	uint32_t stopLoc = (boardState | ~QUEUE_MASK);
+
 	// Finds lest significant zero
 	stopLoc = ~stopLoc & (stopLoc+1);
+
 	// Get value of position
 	stopLoc = (int)log2(stopLoc) & 0xFF;
 	if (stopLoc == 0) {
@@ -72,11 +74,11 @@ BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
 
 	// Build new boardState
 	return 0x00000000
-			| ((dynMask & boardState) >> 1)
-			| (~dynMask & QUEUE_MASK & boardState)
-			| (PAST_MASK & ((PAST_MASK & boardState) >> 1))
-			| (LIGHT_MASK & boardState)
-			| topVeh;
+			| ((dynMask & boardState) >> 1) 				// Shifts unblocked vehicles
+			| (~dynMask & QUEUE_MASK & boardState)			// Places blocked vehicles
+			| (PAST_MASK & ((PAST_MASK & boardState) >> 1)) // Shifts vehicles that are past the stop line
+			| (LIGHT_MASK & boardState)						// Places light state
+			| topVeh;										// Places new vehicle
 
 }
 
@@ -100,6 +102,6 @@ BoardState changeLightColor(LightColor lightColor, BoardState boardState) {
 	}
 
 	return 0x00000000
-			| (~LIGHT_MASK & boardState)
-			| nxtLight;
+			| (~LIGHT_MASK & boardState) // Board state without lights
+			| nxtLight;					 // Lights
 }

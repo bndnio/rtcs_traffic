@@ -11,7 +11,7 @@
 #define TYPES_H_
 
 typedef enum bool {FALSE, TRUE} Boolean;
-typedef uint32_t BoardState;
+typedef uint32_t BoardState;				// 22b board state
 typedef Boolean Vehicle;
 typedef enum tfclt {RED, YELLOW, GREEN} LightColor;
 

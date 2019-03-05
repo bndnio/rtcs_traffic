@@ -175,8 +175,11 @@ the queue empty. */
 #define mainQUEUE_LENGTH					( 1 )
 
 /*-----------------------------------------------------------*/
-// Global Variables
-const int MAX_OF_POT = 4095;
+// Constants
+#define MAX_OF_POT 			4095
+#define GREEN_BASE_TIME 	10000
+#define YELLOW_BASE_TIME 	2000
+#define RED_BASE_TIME 		5000
 
 /*-----------------------------------------------------------*/
 
@@ -188,29 +191,9 @@ static void prvDisplayBoard(void *pvParameters);
 
 /*-----------------------------------------------------------*/
 
-/*
- * TODO: Implement this function for any hardware specific clock configuration
- * that was not already performed before main() was called.
- */
+// Initialize hardware
 static void prvSetupHardware( void );
 
-/*
- * The queue send and receive tasks as described in the comments at the top of
- * this file.
- */
-static void prvQueueReceiveTask( void *pvParameters );
-static void prvQueueSendTask( void *pvParameters );
-
-/*
- * The callback function assigned to the example software timer as described at
- * the top of this file.
- */
-static void vExampleTimerCallback( xTimerHandle xTimer );
-
-/*
- * The event semaphore task as described at the top of this file.
- */
-static void prvEventSemaphoreTask( void *pvParameters );
 
 /*-----------------------------------------------------------*/
 
@@ -223,7 +206,7 @@ static xQueueHandle xFlowQueue = NULL;
  */
 static xSemaphoreHandle xEventSemaphore = NULL;
 
-/* The counters used by the various examples.  The usage is described in the
+/* The counters used by the various examples. The usage is described in the
  * comments at the top of this file.
  */
 static volatile uint32_t ulCountOfTimerCallbackExecutions = 0;
@@ -253,7 +236,7 @@ int main(void)
 	vQueueAddToRegistry( xFlowQueue, "FlowQueue" );
 
 	u_int16_t defaultFlow = 0;
-	u_int32_t defaultBoardState = (0x00000000 | LIGHT_RED);
+	u_int32_t defaultBoardState = (0x00000000 | LIGHT_GREEN);
 	xQueueSend( xFlowQueue, &defaultFlow, 0);
 	xQueueSend( xQueue, &defaultBoardState, 0);
 
@@ -314,9 +297,9 @@ static void prvTrafficFlowAdjustment(void *pvParameters) {
 
 		// Get value from flowQueue
 		xQueueReceive( xFlowQueue, &ulReceivedValue, portMAX_DELAY );
+
 		// Put flow into global
 		uint16_t gFlow = readFlow();
-		printf(gFlow);
 
 		// Push value back to queue
 		xQueueSend( xFlowQueue, &gFlow, 0);
@@ -332,9 +315,9 @@ static void prvTrafficCreator(void *pvParameters) {
 
 	while (1) {
 		// Run every 250ms
-		vTaskDelay(250);
+		vTaskDelay(500);
 
-		// Get value from flowQueue
+		// Get value from Queue and FlowQueue
 		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
 		xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
 
@@ -349,15 +332,16 @@ static void prvTrafficCreator(void *pvParameters) {
 			nextVehicle = FALSE;
 		}
 
-		// TODO: Where does logic go for adv vs. stickyAdv
+		// If light is green, proceed into intersection
 		if ((boardState & LIGHT_MASK) == LIGHT_GREEN) {
 			boardState = advVehicles(nextVehicle, boardState);
-		}
-		else {
+
+		// Block traffic at intersection
+		} else {
 			boardState = stickyAdvVehicles(nextVehicle, boardState);
 		}
 
-		// Push value back to queue
+		// Push value back to queues
 		xQueueSend( xFlowQueue, &flow, 0);
 		xQueueSend( xQueue, &boardState, 0);
 	}
@@ -368,9 +352,11 @@ static void vChangeTrafficLight( xTimerHandle xTimer )
 {
 	u_int32_t boardState;
 
+	// Get value from Queue
 	xQueueReceive( xQueue, &boardState, portMAX_DELAY );
 	u_int32_t lightColor = boardState & LIGHT_MASK;
 
+	// Logic for switching light states
 	if (lightColor == LIGHT_GREEN) {
 		boardState = changeLightColor(YELLOW, boardState);
 	} else if (lightColor == LIGHT_YELLOW) {
@@ -378,24 +364,25 @@ static void vChangeTrafficLight( xTimerHandle xTimer )
 	} else if (lightColor == LIGHT_RED) {
 		boardState = changeLightColor(GREEN, boardState);
 	}
+
+	// Push value back to Queue
 	xQueueSend( xQueue, &boardState, 0);
 }
 
 static void prvTrafficLight(void *pvParameters) {
-	const int GREEN_BASE_TIME = 10000;
-	const int YELLOW_BASE_TIME = 2000;
-	const int RED_BASE_TIME = 4000;
+
 	// Create software timer variable
 	xTimerHandle xTrafficLightSoftwareTimer = NULL;
 
 	u_int16_t  lastFlow;
 	u_int16_t  flow;
-
+	BoardState boardState;
 	xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
+
 	// Initialize timer
 	xTrafficLightSoftwareTimer = xTimerCreate("TrafficLightTimer", /* A text name, purely to help debugging. */
-												(2000 * ((float)1 + (float)flow/(float)MAX_OF_POT)) / portTICK_RATE_MS,		/* The timer period, in this case 1000ms (1s). */
-												pdTRUE,								/* This is a periodic timer, so xAutoReload is set to pdTRUE. */
+												(GREEN_BASE_TIME * ((float)1 + (float)flow/(float)MAX_OF_POT)) / portTICK_RATE_MS,		/* The timer period, in this case 1000ms (1s). */
+												pdFALSE,								/* This is a periodic timer, so xAutoReload is set to pdTRUE. */
 												( void * ) 0,						/* The ID is not used, so can be set to anything. */
 												vChangeTrafficLight				/* The callback function that switches the LED off. */
 											);
@@ -406,9 +393,6 @@ static void prvTrafficLight(void *pvParameters) {
 	http://www.freertos.org/FreeRTOS-timers-xTimerStart.html */
 	xTimerStart( xTrafficLightSoftwareTimer, 0 );
 
-
-
-
 	lastFlow = flow;
 	xQueueSend( xFlowQueue, &flow, 0);
 
@@ -417,27 +401,99 @@ static void prvTrafficLight(void *pvParameters) {
 		// Run every 250ms
 		vTaskDelay(250);
 
+		// Acquire queue values
+		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
 		xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
 
-		xRemainingTime = xTimerGetExpiryTime( xTrafficLightSoftwareTimer ) - xTaskGetTickCount();
-		int newTime;
+		u_int32_t lightColor = boardState & LIGHT_MASK;
 
-		if (((int)flow - (int)lastFlow) > 100) {
-			newTime = xRemainingTime * (1 + (float)((int)flow - (int)lastFlow)/(float)MAX_OF_POT);
-		} else if (((int)flow - (int)lastFlow) < -100) {
-			newTime = xRemainingTime * (1 - (float)abs((int)flow - (int)lastFlow)/(float)(2*MAX_OF_POT));
-		} else {
-			newTime = xRemainingTime;
-		}
-		if (newTime <= 0) newTime = 1;
-		xTimerChangePeriod(xTrafficLightSoftwareTimer, newTime, 0);
+		// Modify timer while active - change period based on change in flow
+	    if( xTimerIsTimerActive( xTrafficLightSoftwareTimer ) != pdFALSE ){
+			int newTime;
+
+	    	// Get time left on timer
+			xRemainingTime = xTimerGetExpiryTime( xTrafficLightSoftwareTimer ) - xTaskGetTickCount();
+
+			// Based on light color apply different scaling factor
+			if (lightColor == LIGHT_GREEN) {
+
+				// When the traffic flow is shrinking (flow is growing)
+				if (((int)flow - (int)lastFlow) > 100) {
+					// Scale time down (factor of 0.5 to 1)
+					newTime = xRemainingTime * (1 - (float)((int)flow - (int)lastFlow)/(float)(2*MAX_OF_POT));
+
+				// When the traffic flow is growing (flow is shrinking)
+				} else if (((int)flow - (int)lastFlow) < -100) {
+					// Scale time up (factor of 1 to 2)
+					newTime = xRemainingTime * (1 + (float)abs((int)flow - (int)lastFlow)/(float)(MAX_OF_POT));
+
+				// Traffic flow not changing
+				} else {
+					newTime = xRemainingTime;
+				}
+
+			} else if (lightColor == LIGHT_YELLOW) {
+				newTime = xRemainingTime;
+
+			} else if (lightColor == LIGHT_RED) {
+				// When the traffic flow is shrinking (flow is growing)
+				if (((int)flow - (int)lastFlow) > 100) {
+
+					// Scale time up (factor of 1 to 2)
+					newTime = xRemainingTime * (1 + (float)((int)flow - (int)lastFlow)/(float)MAX_OF_POT);
+
+				// When the traffic flow is growing (flow is shrinking)
+				} else if (((int)flow - (int)lastFlow) < -100) {
+
+					// Scale time down (factor of 0.5 to 1)
+					newTime = xRemainingTime * (1 - (float)abs((int)flow - (int)lastFlow)/(float)(2*MAX_OF_POT));
+
+				// Traffic flow not changing
+				} else {
+					newTime = xRemainingTime;
+				}
+			}
+
+			if (newTime <= 0) newTime = 1;
+			xTimerChangePeriod(xTrafficLightSoftwareTimer, newTime, 0);
+
+		// Reload timer when complete
+	    } else {
+
+	    	// Set period and reload timer based on next light state (apply different scaling factor)
+			if (lightColor == LIGHT_GREEN) {
+
+				// Increase light period when flow is low (traffic is higher)
+				// Decrease light period when flow is high (traffic is lower)
+				xTimerChangePeriod(xTrafficLightSoftwareTimer,
+								   (GREEN_BASE_TIME * ((float)1.5 - (float)flow/(float)MAX_OF_POT)) / portTICK_RATE_MS,
+								   0);
+
+			} else if (lightColor == LIGHT_YELLOW) {
+
+				// Yellow light time period is invariant
+		    	xTimerChangePeriod(xTrafficLightSoftwareTimer,
+		    					   YELLOW_BASE_TIME / portTICK_RATE_MS,
+								   0);
+
+			} else if (lightColor == LIGHT_RED) {
+
+				// Increase light period when flow is high (traffic is lower)
+				// Decrease light period when flow is low (traffic is higher)
+		    	xTimerChangePeriod(xTrafficLightSoftwareTimer,
+		    					   (RED_BASE_TIME * ((float)0.5 + (float)flow/(float)MAX_OF_POT)) / portTICK_RATE_MS,
+								   0);
+			}
+	    }
+
+	    // Once complete, record flow as lastflow
 		lastFlow = flow;
 
+		// Return queue values
 		xQueueSend( xFlowQueue, &flow, 0);
-
+		xQueueSend( xQueue, &boardState, 0);
 	}
 }
-
 
 
 static void prvDisplayBoard(void *pvParameters) {
@@ -458,32 +514,6 @@ static void prvDisplayBoard(void *pvParameters) {
 
 
 /*-----------------------------------------------------------*/
-
-static void prvQueueSendTask( void *pvParameters )
-{
-portTickType xNextWakeTime;
-const uint32_t ulValueToSend = 100UL;
-
-	/* Initialise xNextWakeTime - this only needs to be done once. */
-	xNextWakeTime = xTaskGetTickCount();
-
-	for( ;; )
-	{
-		/* Place this task in the blocked state until it is time to run again.
-		The block time is specified in ticks, the constant used converts ticks
-		to ms.  While in the Blocked state this task will not consume any CPU
-		time.  http://www.freertos.org/vtaskdelayuntil.html */
-		vTaskDelayUntil( &xNextWakeTime, mainQUEUE_SEND_PERIOD_MS );
-
-		/* Send to the queue - causing the queue receive task to unblock and
-		increment its counter.  0 is used as the block time so the sending
-		operation will not block - it shouldn't need to block as the queue
-		should always be empty at this point in the code. */
-		xQueueSend( xQueue, &ulValueToSend, 0 );
-	}
-}
-/*-----------------------------------------------------------*/
-
 
 void vApplicationTickHook( void )
 {

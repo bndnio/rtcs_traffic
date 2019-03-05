@@ -63,6 +63,7 @@ BoardState stickyAdvVehicles(Vehicle incomingVehicle, BoardState boardState) {
 	if (stopLoc == 0) {
 		stopLoc = 32;
 	}
+
 	// Create mask for just those vehicles before the light with room to move ahead
 	uint32_t dynMask = 0x00000000;
 	for (int i=0; i < 32-stopLoc; i++) {

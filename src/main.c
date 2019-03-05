@@ -153,6 +153,7 @@ functionality.
 #include "firmware.h"
 #include "helpers.h"
 
+
 /* Priorities at which the tasks are created.  The event semaphore task is
 given the maximum priority of ( configMAX_PRIORITIES - 1 ) to ensure it runs as
 soon as the semaphore is given. */
@@ -233,7 +234,6 @@ static volatile uint32_t ulCountOfReceivedSemaphores = 0;
 
 int main(void)
 {
-	xTimerHandle xExampleSoftwareTimer = NULL;
 
 	/* Configure the system ready to run the demo.  The clock configuration
 	can be done here if it was not done before main() was called. */
@@ -262,16 +262,6 @@ int main(void)
 	vSemaphoreCreateBinary( xEventSemaphore );
 	/* Add to the registry, for the benefit of kernel aware debugging. */
 	vQueueAddToRegistry( xEventSemaphore, "xEventSemaphore" );
-
-
-	/* Create the software timer as described in the comments at the top of
-	this file.  http://www.freertos.org/FreeRTOS-timers-xTimerCreate.html. */
-	xExampleSoftwareTimer = xTimerCreate("LEDTimer", /* A text name, purely to help debugging. */
-								mainSOFTWARE_TIMER_PERIOD_MS,		/* The timer period, in this case 1000ms (1s). */
-								pdTRUE,								/* This is a periodic timer, so xAutoReload is set to pdTRUE. */
-								( void * ) 0,						/* The ID is not used, so can be set to anything. */
-								vExampleTimerCallback				/* The callback function that switches the LED off. */
-							);
 
 	/* Create the queue receive task as described in the comments at the top
 	of this	file.  http://www.freertos.org/a00125.html */
@@ -303,12 +293,6 @@ int main(void)
 				NULL, 								/* A parameter that can be passed into the task.  Not used in this simple demo. */
 				mainQUEUE_RECEIVE_TASK_PRIORITY,	/* The priority to assign to the task.  tskIDLE_PRIORITY (which is 0) is the lowest priority.  configMAX_PRIORITIES - 1 is the highest priority. */
 				NULL );								/* Used to obtain a handle to the created task.  Not used in this simple demo, so set to NULL. */
-
-	/* Start the created timer.  A block time of zero is used as the timer
-	command queue cannot possibly be full here (this is the first timer to
-	be created, and it is not yet running).
-	http://www.freertos.org/FreeRTOS-timers-xTimerStart.html */
-	xTimerStart( xExampleSoftwareTimer, 0 );
 
 	/* Start the tasks and timer running. */
 	vTaskStartScheduler();
@@ -379,29 +363,82 @@ static void prvTrafficCreator(void *pvParameters) {
 	}
 }
 
-static void prvTrafficLight(void *pvParameters) {
+
+static void vChangeTrafficLight( xTimerHandle xTimer )
+{
 	u_int32_t boardState;
 
+	xQueueReceive( xQueue, &boardState, portMAX_DELAY );
+	u_int32_t lightColor = boardState & LIGHT_MASK;
+
+	if (lightColor == LIGHT_GREEN) {
+		boardState = changeLightColor(YELLOW, boardState);
+	} else if (lightColor == LIGHT_YELLOW) {
+		boardState = changeLightColor(RED, boardState);
+	} else if (lightColor == LIGHT_RED) {
+		boardState = changeLightColor(GREEN, boardState);
+	}
+	xQueueSend( xQueue, &boardState, 0);
+}
+
+static void prvTrafficLight(void *pvParameters) {
+	const int GREEN_BASE_TIME = 10000;
+	const int YELLOW_BASE_TIME = 2000;
+	const int RED_BASE_TIME = 4000;
+	// Create software timer variable
+	xTimerHandle xTrafficLightSoftwareTimer = NULL;
+
+	u_int16_t  lastFlow;
+	u_int16_t  flow;
+
+	xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
+	// Initialize timer
+	xTrafficLightSoftwareTimer = xTimerCreate("TrafficLightTimer", /* A text name, purely to help debugging. */
+												(2000 * ((float)1 + (float)flow/(float)MAX_OF_POT)) / portTICK_RATE_MS,		/* The timer period, in this case 1000ms (1s). */
+												pdTRUE,								/* This is a periodic timer, so xAutoReload is set to pdTRUE. */
+												( void * ) 0,						/* The ID is not used, so can be set to anything. */
+												vChangeTrafficLight				/* The callback function that switches the LED off. */
+											);
+
+	/* Start the created timer.  A block time of zero is used as the timer
+	command queue cannot possibly be full here (this is the first timer to
+	be created, and it is not yet running).
+	http://www.freertos.org/FreeRTOS-timers-xTimerStart.html */
+	xTimerStart( xTrafficLightSoftwareTimer, 0 );
+
+
+
+
+	lastFlow = flow;
+	xQueueSend( xFlowQueue, &flow, 0);
+
+	TickType_t xRemainingTime;
 	while(1) {
 		// Run every 250ms
-		vTaskDelay(5000);
+		vTaskDelay(250);
 
-		xQueueReceive( xQueue, &boardState, portMAX_DELAY );
-		u_int32_t lightColor = boardState & LIGHT_MASK;
+		xQueueReceive( xFlowQueue, &flow, portMAX_DELAY );
 
-		// TODO: figure out timing
-		// TODO: get mutex rip
-		if (lightColor == LIGHT_GREEN) {
-			boardState = changeLightColor(YELLOW, boardState);
-		} else if (lightColor == LIGHT_YELLOW) {
-			boardState = changeLightColor(RED, boardState);
-		} else if (lightColor == LIGHT_RED) {
-			boardState = changeLightColor(GREEN, boardState);
+		xRemainingTime = xTimerGetExpiryTime( xTrafficLightSoftwareTimer ) - xTaskGetTickCount();
+		int newTime;
+
+		if (((int)flow - (int)lastFlow) > 100) {
+			newTime = xRemainingTime * (1 + (float)((int)flow - (int)lastFlow)/(float)MAX_OF_POT);
+		} else if (((int)flow - (int)lastFlow) < -100) {
+			newTime = xRemainingTime * (1 - (float)abs((int)flow - (int)lastFlow)/(float)(2*MAX_OF_POT));
+		} else {
+			newTime = xRemainingTime;
 		}
-		xQueueSend( xQueue, &boardState, 0);
+		if (newTime <= 0) newTime = 1;
+		xTimerChangePeriod(xTrafficLightSoftwareTimer, newTime, 0);
+		lastFlow = flow;
+
+		xQueueSend( xFlowQueue, &flow, 0);
 
 	}
 }
+
+
 
 static void prvDisplayBoard(void *pvParameters) {
 	uint32_t ulReceivedValue;
@@ -419,13 +456,7 @@ static void prvDisplayBoard(void *pvParameters) {
 	}
 }
 
-static void vExampleTimerCallback( xTimerHandle xTimer )
-{
-	/* The timer has expired.  Count the number of times this happens.  The
-	timer that calls this function is an auto re-load timer, so it will
-	execute periodically. http://www.freertos.org/RTOS-software-timer.html */
-	ulCountOfTimerCallbackExecutions++;
-}
+
 /*-----------------------------------------------------------*/
 
 static void prvQueueSendTask( void *pvParameters )
@@ -453,40 +484,6 @@ const uint32_t ulValueToSend = 100UL;
 }
 /*-----------------------------------------------------------*/
 
-static void prvQueueReceiveTask( void *pvParameters )
-{
-uint32_t ulReceivedValue;
-
-	for( ;; )
-	{
-		/* Wait until something arrives in the queue - this task will block
-		indefinitely provided INCLUDE_vTaskSuspend is set to 1 in
-		FreeRTOSConfig.h.  http://www.freertos.org/a00118.html */
-		xQueueReceive( xQueue, &ulReceivedValue, portMAX_DELAY );
-
-		/*  To get here something must have been received from the queue, but
-		is it the expected value?  If it is, increment the counter. */
-		if( ulReceivedValue == 100UL )
-		{
-			/* Count the number of items that have been received correctly. */
-			ulCountOfItemsReceivedOnQueue++;
-		}
-	}
-}
-/*-----------------------------------------------------------*/
-
-static void prvEventSemaphoreTask( void *pvParameters )
-{
-	for( ;; )
-	{
-		/* Block until the semaphore is 'given'. */
-		xSemaphoreTake( xEventSemaphore, portMAX_DELAY );
-
-		/* Count the number of times the semaphore is received. */
-		ulCountOfReceivedSemaphores++;
-	}
-}
-/*-----------------------------------------------------------*/
 
 void vApplicationTickHook( void )
 {

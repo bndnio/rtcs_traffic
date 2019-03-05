@@ -253,7 +253,7 @@ int main(void)
 	vQueueAddToRegistry( xFlowQueue, "FlowQueue" );
 
 	u_int16_t defaultFlow = 0;
-	u_int32_t defaultBoardState = (0x00000000 | LIGHT_GREEN);
+	u_int32_t defaultBoardState = (0x00000000 | LIGHT_RED);
 	xQueueSend( xFlowQueue, &defaultFlow, 0);
 	xQueueSend( xQueue, &defaultBoardState, 0);
 
@@ -366,14 +366,12 @@ static void prvTrafficCreator(void *pvParameters) {
 		}
 
 		// TODO: Where does logic go for adv vs. stickyAdv
-		u_int32_t temp = boardState & LIGHT_MASK;
-		u_int32_t temp2 = 0b00000000000000000001000000000000;
 		if ((boardState & LIGHT_MASK) == LIGHT_GREEN) {
 			boardState = advVehicles(nextVehicle, boardState);
 		}
-//		else {
-//			boardState = stickyAdvVehicles(nextVehicle, boardState);
-//		}
+		else {
+			boardState = stickyAdvVehicles(nextVehicle, boardState);
+		}
 
 		// Push value back to queue
 		xQueueSend( xFlowQueue, &flow, 0);
